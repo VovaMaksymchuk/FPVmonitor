@@ -47,7 +47,7 @@ void tune(uint16_t freq) {
 }
 
 void applyCalibration() {
-    for (int i = 0; i < 2; i++) rx.rx((Source)i).setCalibration(cfg.d.rssiMin[i], cfg.d.rssiMax[i]);
+    for (int i = 0; i < Receivers::COUNT; i++) rx.byIndex(i).setCalibration(cfg.d.rssiMin[i], cfg.d.rssiMax[i]);
 }
 
 }  // namespace app

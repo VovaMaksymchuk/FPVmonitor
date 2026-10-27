@@ -117,6 +117,7 @@ private:
         BAND_LAST = BAND_FIRST + BAND_COUNT - 1,
         SCAN_RANGE,
         BUZZER,
+        CAL_RX,
         CAL_MIN,
         CAL_MAX,
         BACK,
@@ -132,6 +133,7 @@ private:
     uint16_t mv_ = 0;
     uint32_t lastRead_ = 0;
 
+    uint8_t calRx_ = 0;       // receiver being calibrated: 0 INT, 1 EXT, 2 scanner
     uint8_t calItem_ = 0;     // CAL_MIN / CAL_MAX while measuring, 0 otherwise
     uint32_t calEnd_ = 0;
     uint32_t calSum_ = 0;

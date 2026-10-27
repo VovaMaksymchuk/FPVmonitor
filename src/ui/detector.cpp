@@ -32,7 +32,8 @@ void DetectorScreen::enter() {
     floor_ = 0;
     havePass_ = false;
     release();
-    app::rx.active().setFrequency(freqs_[0]);
+    app::rx.active().setFrequency(app::cfg.d.freq);  // video receiver keeps its channel
+    app::rx.scanner().setFrequency(freqs_[0]);
 }
 
 void DetectorScreen::leave() {
@@ -65,7 +66,7 @@ void DetectorScreen::next() {
         computeFloor();
         havePass_ = true;
     }
-    app::rx.active().setFrequency(freqs_[idx_]);
+    app::rx.scanner().setFrequency(freqs_[idx_]);
 }
 
 void DetectorScreen::release() {
@@ -81,7 +82,7 @@ void DetectorScreen::addHistory() {
 }
 
 void DetectorScreen::tick() {
-    Rx5808 &r = app::rx.active();
+    Rx5808 &r = app::rx.scanner();
     uint32_t now = millis();
     if (!r.settled()) return;
 

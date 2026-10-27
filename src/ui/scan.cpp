@@ -17,11 +17,12 @@ void ScanScreen::enter() {
     passes_ = 0;
     peakCount_ = 0;
     cursor_ = 0;
-    app::rx.active().setFrequency(freqAt(0));
+    app::rx.active().setFrequency(app::cfg.d.freq);  // video receiver keeps its channel
+    app::rx.scanner().setFrequency(freqAt(0));
 }
 
 void ScanScreen::tick() {
-    Rx5808 &r = app::rx.active();
+    Rx5808 &r = app::rx.scanner();
     if (!r.settled()) return;
     rssi_[idx_] = r.readRssi();
     if (++idx_ >= n_) {

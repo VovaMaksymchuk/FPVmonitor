@@ -3,6 +3,8 @@
 
 using namespace ui;
 
+static const char *const CAL_NAMES[] = {"INT", "EXT", "SCAN"};
+
 static constexpr int VISIBLE = 5;
 static constexpr int ROW_H = 28;
 static constexpr int ROW_Y0 = 78;
@@ -11,6 +13,8 @@ static constexpr uint16_t CAL_MIN_SPAN = 50;  // mV between min and max
 
 void SettingsScreen::enter() {
     app::tune(app::cfg.d.freq);
+    app::rx.scanner().setFrequency(app::cfg.d.freq);
+    calRx_ = (uint8_t)app::rx.source();
     editing_ = false;
     calItem_ = 0;
 }
@@ -22,7 +26,7 @@ void SettingsScreen::showMessage(const char *msg) {
 
 void SettingsScreen::itemText(uint8_t item, char *buf, size_t len) const {
     const SettingsData &d = app::cfg.d;
-    int src = (int)app::rx.source();
+    int src = calRx_;
     if (item >= BAND_FIRST && item <= BAND_LAST) {
         int b = item - BAND_FIRST;
         snprintf(buf, len, "Band %c  %s", BAND_NAMES[b], (d.bandMask & (1 << b)) ? "ON" : "off");
@@ -32,6 +36,7 @@ void SettingsScreen::itemText(uint8_t item, char *buf, size_t len) const {
     case THRESH:     snprintf(buf, len, "Thresh  %u%%", d.threshold); break;
     case SCAN_RANGE: snprintf(buf, len, "Scan  %s", d.scanFull ? "5300-5999" : "5645-5945"); break;
     case BUZZER:     snprintf(buf, len, "Buzzer  %s", d.buzzer ? "ON" : "off"); break;
+    case CAL_RX:     snprintf(buf, len, "Cal rx  %s", CAL_NAMES[calRx_]); break;
     case CAL_MIN:    snprintf(buf, len, "Cal min %umV", d.rssiMin[src]); break;
     case CAL_MAX:    snprintf(buf, len, "Cal max %umV", d.rssiMax[src]); break;
     case BACK:       snprintf(buf, len, "< Back"); break;
@@ -61,6 +66,7 @@ void SettingsScreen::activate() {
         app::buzzer.setEnabled(d.buzzer);
         app::cfg.markDirty();
         break;
+    case CAL_RX: calRx_ = (calRx_ + 1) % Receivers::COUNT; break;
     case CAL_MIN:
     case CAL_MAX:
         calItem_ = cursor_;
@@ -91,7 +97,7 @@ void SettingsScreen::handle(const KeyEvent &ev) {
 }
 
 void SettingsScreen::tick() {
-    Rx5808 &r = app::rx.active();
+    Rx5808 &r = app::rx.byIndex(calRx_);
     uint32_t now = millis();
     if (!r.settled() || now - lastRead_ < 20) return;
     lastRead_ = now;
@@ -103,7 +109,7 @@ void SettingsScreen::tick() {
     if ((int32_t)(now - calEnd_) < 0) return;
 
     SettingsData &d = app::cfg.d;
-    int src = (int)app::rx.source();
+    int src = calRx_;
     uint16_t avg = calN_ ? calSum_ / calN_ : 0;
     bool ok;
     if (calItem_ == CAL_MIN) {

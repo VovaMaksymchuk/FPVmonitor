@@ -8,6 +8,7 @@
 // RSSI inputs (must be ADC1 pins)
 #define PIN_RSSI_INT    1
 #define PIN_RSSI_EXT    2
+#define PIN_RSSI_SCAN   17          // dedicated scanner module (ADC2 is fine, no Wi-Fi)
 
 // Buttons, active low (to GND, internal pull-up)
 #define PIN_BTN_UP      3
@@ -15,10 +16,12 @@
 #define PIN_BTN_DOWN    5
 
 // RX5808 SPI bus (bit-banged). DATA/CLK are shared, LE is per module.
+// Third module (SCAN) has no video: it runs Scan/Detector while INT/EXT keep the picture.
 #define PIN_RX_DATA     6
 #define PIN_RX_CLK      7
 #define PIN_RX_LE_INT   8
 #define PIN_RX_LE_EXT   13
+#define PIN_RX_LE_SCAN  16
 
 // GC9A01 (RST and BLK are driven by GPIO; BLK is PWM-dimmed)
 #define PIN_TFT_DC      9

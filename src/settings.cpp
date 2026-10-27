@@ -3,13 +3,13 @@
 #include "channels.h"
 #include <Preferences.h>
 
-static constexpr uint8_t SETTINGS_VERSION = 1;
+static constexpr uint8_t SETTINGS_VERSION = 2;
 static const char *NS = "fpvmon";
 
 void Settings::defaults() {
     d.freq = FREQ_DEFAULT;
     d.mode = (uint8_t)Mode::Monitor;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         d.rssiMin[i] = RSSI_MV_MIN_DEF;
         d.rssiMax[i] = RSSI_MV_MAX_DEF;
     }
