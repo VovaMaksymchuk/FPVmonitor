@@ -34,12 +34,22 @@ LGFX::LGFX() {
         cfg.bus_shared = false;
         panel_.config(cfg);
     }
+    {
+        auto cfg = light_.config();
+        cfg.pin_bl = PIN_TFT_BL;
+        cfg.invert = false;
+        cfg.freq = 12000;
+        cfg.pwm_channel = 7;
+        light_.config(cfg);
+        panel_.setLight(&light_);
+    }
     setPanel(&panel_);
 }
 
 bool displayBegin() {
     tft.init();
     tft.setRotation(0);
+    tft.setBrightness(TFT_BL_DEFAULT);
     tft.fillScreen(TFT_BLACK);
 
     canvas.setColorDepth(16);

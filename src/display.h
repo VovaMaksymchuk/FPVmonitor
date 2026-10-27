@@ -9,6 +9,7 @@ public:
 private:
     lgfx::Panel_GC9A01 panel_;
     lgfx::Bus_SPI bus_;
+    lgfx::Light_PWM light_;
 };
 
 extern LGFX tft;

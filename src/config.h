@@ -20,12 +20,14 @@
 #define PIN_RX_LE_INT   8
 #define PIN_RX_LE_EXT   13
 
-// GC9A01 (RST is tied to 3V3 through RC, BL is tied to 3V3)
+// GC9A01 (RST and BLK are driven by GPIO; BLK is PWM-dimmed)
 #define PIN_TFT_DC      9
 #define PIN_TFT_CS      10
 #define PIN_TFT_MOSI    11
 #define PIN_TFT_SCK     12
-#define PIN_TFT_RST     -1
+#define PIN_TFT_RST     14
+#define PIN_TFT_BL      15
+#define TFT_BL_DEFAULT  255         // 0..255
 #define TFT_SPI_HZ      40000000
 
 // Buzzer through an NPN transistor
