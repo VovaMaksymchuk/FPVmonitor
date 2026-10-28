@@ -2,6 +2,7 @@
 #include "app.h"
 #include "channels.h"
 #include "config.h"
+#include "ui/common.h"
 
 class MenuScreen : public Screen {
 public:
@@ -35,6 +36,8 @@ private:
 };
 
 // Repeated sweep with a spectrum graph and the strongest peaks
+// One sweep with the scanner module, then the result: spectrum on the ring
+// and the strongest channels; UP/DOWN switch the video receiver between them.
 class ScanScreen : public Screen {
 public:
     void enter() override;
@@ -44,63 +47,52 @@ public:
 
 private:
     static constexpr int MAX_POINTS = (FREQ_MAX - FREQ_MIN) / SCAN_STEP + 1;
-    static constexpr int MAX_PEAKS = 5;
     struct Peak {
-        uint16_t freq;
+        uint16_t freq;   // snapped to a table channel when close
         uint8_t rssi;
-        uint8_t index;
     };
 
-    uint16_t freqAt(int i) const { return fmin_ + i * SCAN_STEP; }
+    uint16_t freqAt(int i) const { return ring_.f0 + i * SCAN_STEP; }
+    void start();
     void findPeaks();
 
+    ui::FreqRing ring_;
     uint8_t rssi_[MAX_POINTS];
-    uint16_t fmin_ = 0, fmax_ = 0;
-    uint16_t n_ = 0, idx_ = 0, passes_ = 0;
-    Peak peaks_[MAX_PEAKS];
-    uint8_t peakCount_ = 0, cursor_ = 0;
+    uint16_t n_ = 0, idx_ = 0;
+    bool done_ = false;
+    uint32_t startedAt_ = 0, scanMs_ = 0;
+    uint8_t level_ = 0;                // noise floor + threshold
+    Peak peaks_[ui::LIST_ROWS];
+    uint8_t peakCount_ = 0;
+    uint16_t selFreq_ = 0;             // channel the video receiver is on
 };
 
-// Endless search over the selected bands, beeps and locks on a signal
+// Scanner sweeps the selected bands non-stop; the strongest channels are
+// listed and UP/DOWN switch the video receiver between them.
 class DetectorScreen : public Screen {
 public:
     void enter() override;
-    void leave() override;
     void handle(const KeyEvent &ev) override;
     void tick() override;
     void draw(LGFX_Sprite &c) override;
 
 private:
-    enum State : uint8_t { SEARCH, CONFIRM, LOCK };
-    struct Hit {
-        uint16_t freq;
-        uint8_t rssi;
-    };
+    static constexpr int TOP = ui::LIST_ROWS;
 
     void buildList();
-    void next();
-    void release();
-    void addHistory();
     void computeFloor();
-    bool ignored(int i) const;
     uint8_t trigger() const;
+    int topList(uint8_t *out) const;   // channel indexes, strongest first
+    void select(uint16_t freq);
 
+    ui::FreqRing ring_;
     uint16_t freqs_[CHANNEL_COUNT];
-    uint8_t last_[CHANNEL_COUNT];
-    uint32_t skipUntil_[CHANNEL_COUNT];
-    bool muted_[CHANNEL_COUNT];
+    uint8_t level_[CHANNEL_COUNT];     // smoothed RSSI per channel
+    bool active_[CHANNEL_COUNT];       // above trigger (with hysteresis)
     uint8_t count_ = 0, idx_ = 0;
     uint8_t floor_ = 0;
     bool havePass_ = false;
-
-    State state_ = SEARCH;
-    uint8_t lockRssi_ = 0, lockPeak_ = 0;
-    uint32_t belowSince_ = 0;
-    uint32_t lastRead_ = 0;
-
-    static constexpr int HISTORY = 3;
-    Hit history_[HISTORY];
-    uint8_t histCount_ = 0;
+    uint16_t selFreq_ = 0;             // channel the video receiver is on
 };
 
 class SettingsScreen : public Screen {

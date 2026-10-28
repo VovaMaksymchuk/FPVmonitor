@@ -59,9 +59,7 @@
 // Detector
 // ---------------------------------------------------------------------------
 #define DET_THRESHOLD_DEF   25      // % above noise floor
-#define DET_HYSTERESIS      8       // % below threshold before "lost"
-#define DET_LOST_MS         1000
-#define DET_SKIP_MS         60000   // UP during lock ignores the channel this long
+#define DET_HYSTERESIS      8       // % below threshold before a channel is inactive again
 
 // ---------------------------------------------------------------------------
 // UI timing

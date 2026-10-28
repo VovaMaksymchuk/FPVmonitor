@@ -3,34 +3,44 @@
 
 using namespace ui;
 
-static constexpr int GX0 = 28, GW = 184;   // graph area
-static constexpr int GY1 = 150, GH = 80;
 static constexpr int PEAK_SEPARATION = 3;  // points, 15 MHz
 
 void ScanScreen::enter() {
+    selFreq_ = app::cfg.d.freq;
+    app::rx.active().setFrequency(selFreq_);  // video receiver keeps its channel
+    start();
+}
+
+void ScanScreen::start() {
     bool full = app::cfg.d.scanFull;
-    fmin_ = full ? FREQ_MIN : SCAN_NARROW_MIN;
-    fmax_ = full ? FREQ_MAX : SCAN_NARROW_MAX;
-    n_ = (fmax_ - fmin_) / SCAN_STEP + 1;
+    ring_.f0 = full ? FREQ_MIN : SCAN_NARROW_MIN;
+    n_ = ((full ? FREQ_MAX : SCAN_NARROW_MAX) - ring_.f0) / SCAN_STEP + 1;
+    ring_.f1 = freqAt(n_ - 1);
     memset(rssi_, 0, sizeof(rssi_));
     idx_ = 0;
-    passes_ = 0;
+    done_ = false;
     peakCount_ = 0;
-    cursor_ = 0;
-    app::rx.active().setFrequency(app::cfg.d.freq);  // video receiver keeps its channel
+    startedAt_ = millis();
     app::rx.scanner().setFrequency(freqAt(0));
 }
 
 void ScanScreen::tick() {
+    if (done_) return;
     Rx5808 &r = app::rx.scanner();
     if (!r.settled()) return;
     rssi_[idx_] = r.readRssi();
-    if (++idx_ >= n_) {
-        idx_ = 0;
-        passes_++;
-        findPeaks();
+    if (++idx_ < n_) {
+        r.setFrequency(freqAt(idx_));
+        return;
     }
-    r.setFrequency(freqAt(idx_));
+    done_ = true;
+    scanMs_ = millis() - startedAt_;
+    findPeaks();
+    app::buzzer.beep(peakCount_ ? 3000 : 1500, 80);
+#if DEBUG_LOG
+    Serial.printf("[SCAN] %u points in %u ms, %u signals\n", n_, scanMs_, peakCount_);
+    for (int i = 0; i < peakCount_; i++) Serial.printf("  %u MHz  %u%%\n", peaks_[i].freq, peaks_[i].rssi);
+#endif
 }
 
 void ScanScreen::findPeaks() {
@@ -43,80 +53,71 @@ void ScanScreen::findPeaks() {
         while (j >= 0 && sorted[j] > v) sorted[j + 1] = sorted[j], j--;
         sorted[j + 1] = v;
     }
-    int level = sorted[n_ / 2] + app::cfg.d.threshold;
+    level_ = min(100, sorted[n_ / 2] + app::cfg.d.threshold);
 
     // strongest points first, skipping neighbours of already accepted peaks
     peakCount_ = 0;
     bool used[MAX_POINTS] = {false};
-    while (peakCount_ < MAX_PEAKS) {
+    while (peakCount_ < LIST_ROWS) {
         int best = -1;
         for (int i = 0; i < n_; i++)
             if (!used[i] && (best < 0 || rssi_[i] > rssi_[best])) best = i;
-        if (best < 0 || rssi_[best] < level) break;
+        if (best < 0 || rssi_[best] < level_) break;
         for (int i = max(0, best - PEAK_SEPARATION); i <= min(n_ - 1, best + PEAK_SEPARATION); i++) used[i] = true;
 
         uint16_t f = freqAt(best);
         ChannelRef ref = findChannel(f, SCAN_STEP + 1);
-        peaks_[peakCount_++] = {ref.valid() ? BAND_FREQS[ref.band][ref.ch] : f, rssi_[best], (uint8_t)best};
+        peaks_[peakCount_++] = {ref.valid() ? BAND_FREQS[ref.band][ref.ch] : f, rssi_[best]};
     }
-    if (cursor_ >= peakCount_) cursor_ = 0;
 }
 
 void ScanScreen::handle(const KeyEvent &ev) {
-    if (peakCount_ == 0) return;
-    switch (ev.key) {
-    case Key::Up:   cursor_ = (cursor_ + peakCount_ - 1) % peakCount_; break;
-    case Key::Down: cursor_ = (cursor_ + 1) % peakCount_; break;
-    case Key::Ok:
-        app::tune(peaks_[cursor_].freq);
-        app::switchTo(Mode::Monitor);
-        break;
-    default: break;
+    if (ev.key == Key::Ok) {
+        if (done_) start();
+        return;
     }
+    if (!done_ || peakCount_ == 0 || (ev.key != Key::Up && ev.key != Key::Down)) return;
+
+    int pos = -1;
+    for (int i = 0; i < peakCount_; i++)
+        if (peaks_[i].freq == selFreq_) pos = i;
+    if (pos < 0) pos = 0;
+    else pos = (pos + (ev.key == Key::Up ? peakCount_ - 1 : 1)) % peakCount_;
+    selFreq_ = peaks_[pos].freq;
+    app::tune(selFreq_);
 }
 
 void ScanScreen::draw(LGFX_Sprite &c) {
-    sourceBadge(c);
-    centerText(c, "SCAN", 44, &fonts::Font2, COL_DIM);
-
-    // spectrum
-    c.drawFastHLine(GX0, GY1 + 1, GW, COL_BG_ARC);
-    for (int i = 0; i < n_; i++) {
-        int x0 = GX0 + i * GW / n_;
-        int x1 = GX0 + (i + 1) * GW / n_;
-        int w = max(1, x1 - x0 - (n_ < 100 ? 1 : 0));
-        int h = rssi_[i] * GH / 100;
-        if (h > 0) c.fillRect(x0, GY1 - h, w, h, rssiColor(rssi_[i]));
+    // spectrum on the ring
+    ring_.drawScale(c);
+    float half = FreqRing::SPAN / n_ * 0.45f;
+    int shown = done_ ? n_ : idx_;
+    for (int i = 0; i < shown; i++) {
+        uint16_t col = !done_ || rssi_[i] >= level_ ? rssiColor(rssi_[i]) : COL_DIM;
+        ring_.drawBar(c, freqAt(i), rssi_[i], half, col);
     }
-    int sweepX = GX0 + idx_ * GW / n_;
-    c.drawFastVLine(sweepX, GY1 - GH, GH, COL_DIM);
+    ring_.drawSelected(c, selFreq_);
 
     char buf[24];
-    c.setFont(&fonts::Font0);
-    c.setTextColor(COL_DIM);
-    c.setTextDatum(textdatum_t::top_left);
-    snprintf(buf, sizeof(buf), "%u", fmin_);
-    c.drawString(buf, GX0, GY1 + 5);
-    c.setTextDatum(textdatum_t::top_right);
-    snprintf(buf, sizeof(buf), "%u", fmax_);
-    c.drawString(buf, GX0 + GW, GY1 + 5);
-
-    if (peakCount_ == 0) {
-        centerText(c, passes_ == 0 ? "scanning..." : "no signal", 186, &fonts::Font4, COL_DIM);
+    if (!done_) {
+        ring_.drawCursor(c, freqAt(idx_));
+        centerText(c, "SCAN", 50, &fonts::Font2, COL_DIM);
+        snprintf(buf, sizeof(buf), "%u%%", idx_ * 100 / n_);
+        centerText(c, buf, 104, &fonts::Font4, TFT_WHITE);
+        snprintf(buf, sizeof(buf), "%u MHz", freqAt(idx_));
+        centerText(c, buf, 132, &fonts::Font2, COL_DIM);
+        videoFooter(c, selFreq_);
         return;
     }
 
-    // selected peak marker and info
-    const Peak &p = peaks_[cursor_];
-    int px = GX0 + p.index * GW / n_ + GW / n_ / 2;
-    int py = GY1 - p.rssi * GH / 100 - 4;
-    c.fillTriangle(px, py, px - 5, py - 8, px + 5, py - 8, TFT_WHITE);
+    // result
+    snprintf(buf, sizeof(buf), "SCAN %u.%us", scanMs_ / 1000, scanMs_ % 1000 / 100);
+    centerText(c, buf, 50, &fonts::Font2, COL_DIM);
+    if (peakCount_ == 0) centerText(c, "no signals", 110, &fonts::Font4, COL_DIM);
+    for (int i = 0; i < peakCount_; i++)
+        channelRow(c, i, peaks_[i].freq, peaks_[i].rssi, peaks_[i].freq == selFreq_, false);
 
-    char name[3];
-    channelName(findChannel(p.freq), name);
-    snprintf(buf, sizeof(buf), "%s %u  %u%%", name, p.freq, p.rssi);
-    centerText(c, buf, 184, &fonts::Font4, rssiColor(p.rssi));
-
-    snprintf(buf, sizeof(buf), "%u/%u  OK: tune", cursor_ + 1, peakCount_);
-    hint(c, buf);
+    snprintf(buf, sizeof(buf), "%u sig  OK:rescan", peakCount_);
+    centerText(c, buf, 182, &fonts::Font0, COL_DIM);
+    videoFooter(c, selFreq_);
 }
